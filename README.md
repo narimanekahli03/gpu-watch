@@ -1,8 +1,10 @@
 # GPU Watch
 
-**Plateforme de surveillance GPU en temps réel, avec un analyste IA qui explique ce qui se passe.**
+**Détecteur de gaspillage GPU : surveillance en temps réel, calcul des coûts et rapport FinOps rédigé par IA.**
 
-GPU Watch collecte les métriques d'un GPU NVIDIA toutes les 5 secondes, les stocke sur AWS, les affiche dans un tableau de bord temps réel, déclenche des alertes par email et produit des diagnostics automatiques en français grâce à un modèle de langage open source qui tourne… sur le GPU qu'il surveille.
+Un GPU cloud se loue à l'heure, qu'il calcule ou non. Une session de développement oubliée, un entraînement terminé dans la nuit ou un GPU qui attend ses données laissent tourner le compteur pour rien.
+
+GPU Watch mesure l'activité d'un GPU NVIDIA toutes les 5 secondes, **traduit son inactivité en dollars**, projette le gaspillage sur un mois et chiffre les économies possibles. Un modèle de langage open source, exécuté sur le GPU surveillé, rédige un rapport FinOps en français à partir de faits calculés par le code.
 
 ![Tableau de bord GPU Watch](docs/dashboard.png)
 
@@ -10,12 +12,13 @@ GPU Watch collecte les métriques d'un GPU NVIDIA toutes les 5 secondes, les sto
 
 ## Fonctionnalités
 
-- **Collecte de métriques GPU** : utilisation, mémoire, température et consommation électrique, lues via `nvidia-smi`
-- **API serverless sécurisée** : une fonction AWS Lambda reçoit les mesures, protégée par un jeton d'authentification
-- **Historique** : stockage des séries temporelles dans Amazon DynamoDB
-- **Tableau de bord temps réel** : jauges et courbes des 15 dernières minutes, actualisées toutes les 5 secondes
+- **Analyse des coûts en direct** : coût de la période, argent gaspillé pendant l'inactivité, gaspillage projeté sur un mois et économie possible
+- **Collecte de métriques GPU** : utilisation, mémoire, température et consommation, lues via `nvidia-smi`
+- **API serverless sécurisée** : une fonction AWS Lambda reçoit les mesures, protégée par un jeton
+- **Historique** : séries temporelles stockées dans Amazon DynamoDB
+- **Tableau de bord temps réel** : cartes de coûts, jauges et courbes des 15 dernières minutes
 - **Alertes** : alarmes Amazon CloudWatch (surchauffe, inactivité prolongée) avec notification par email via Amazon SNS
-- **Analyste IA** : un LLM open source (Qwen 2.5, 3 milliards de paramètres) lit les métriques et rédige un diagnostic
+- **Rapport FinOps par IA** : un LLM open source (Qwen 2.5, 3 milliards de paramètres) rédige un rapport en trois parties : activité, coûts, recommandations
 
 ## Architecture
 
@@ -26,9 +29,9 @@ flowchart LR
     B --> D["Amazon CloudWatch<br/>métriques"]
     D --> E["Alarmes"]
     E -->|SNS| F["Email"]
-    C --> G["Tableau de bord<br/>temps réel"]
+    C --> G["Tableau de bord<br/>coûts + métriques"]
     H["Analyste IA<br/>Qwen 2.5 sur GPU"] -->|"lit les 15 dernières min"| B
-    H -->|"publie le diagnostic"| B
+    H -->|"publie le rapport"| B
     G -.servi par.-> B
 ```
 
@@ -36,27 +39,48 @@ Une seule fonction Lambda joue trois rôles, selon la requête :
 
 | Requête | Rôle |
 |---|---|
-| `POST /` avec en-tête `x-jeton` | Réception d'une mesure ou d'un diagnostic IA |
+| `POST /` avec en-tête `x-jeton` | Réception d'une mesure ou d'un rapport IA |
 | `GET /` | Page du tableau de bord |
 | `GET /?donnees=1` | Mesures des 15 dernières minutes (JSON) |
-| `GET /?analyse=1` | Dernier diagnostic de l'IA (JSON) |
+| `GET /?analyse=1` | Dernier rapport de l'IA (JSON) |
+
+## Le calcul du gaspillage
+
+Le GPU T4 utilisé correspond chez AWS à une instance **g4dn.xlarge** : environ 0,526 $/h à la demande et 0,25 $/h en Spot (us-east-1, prix Spot variable).
+
+| Étape | Formule |
+|---|---|
+| Coût d'une mesure | 0,526 $ × 5 s / 3600 s ≈ 0,00073 $ |
+| Mesure inactive | utilisation inférieure à 10 % |
+| Argent gaspillé | nombre de mesures inactives × coût d'une mesure |
+| Projection mensuelle | 730 h × 0,526 $ ≈ 384 $, dont gaspillé : 384 $ × part d'inactivité |
+| Option 1 : arrêt automatique | 730 h × part d'activité × 0,526 $ |
+| Option 2 : arrêt automatique + Spot | 730 h × part d'activité × 0,25 $ |
+
+**Hypothèses** :
+- le GPU de Colab est gratuit ; le calcul estime ce que coûterait le même usage sur une instance AWS ;
+- la projection suppose que le rythme observé se maintient 24 h/24 pendant un mois ;
+- l'économie de l'arrêt automatique est un maximum théorique (temps de redémarrage, sauvegarde du travail) ;
+- une instance Spot peut être reprise par AWS avec 2 minutes de préavis : elle convient aux calculs interruptibles, pas aux services permanents.
 
 ## Choix techniques
 
-- **Serverless (Lambda) plutôt qu'un serveur** : aucun coût quand rien ne tourne, aucune machine à maintenir. Adapté à un trafic irrégulier.
-- **DynamoDB avec clé `gpu` + `horodatage`** : récupérer « les 15 dernières minutes d'un GPU » est une simple requête sur la clé de tri, sans parcourir toute la table. Les diagnostics IA sont rangés dans la même table sous la clé `analyse:<gpu>`, sans se mélanger aux mesures.
-- **Python calcule, l'IA raconte** : les petits modèles de langage sont fiables pour rédiger mais se trompent souvent dans les comparaisons de nombres. Les statistiques et les dépassements de seuil sont donc calculés en Python et fournis tout prêts au modèle.
-- **Secrets hors du code** : le jeton est lu depuis les variables d'environnement Lambda et les Secrets Colab, jamais écrit dans le dépôt.
-- **Moindre privilège** : la politique IAM fournie (`aws/iam-policy.json`) n'autorise que les actions nécessaires sur la seule table du projet.
+- **Python calcule, l'IA rédige.** Les petits modèles de langage se trompent dans les calculs, les comparaisons de nombres et les durées. Toutes les statistiques, périodes d'activité, montants et dépassements de seuil sont donc calculés en Python, et le modèle a pour consigne stricte de les reprendre tels quels.
+- **Ancrage (grounding) des connaissances.** Interrogé sur les instances Spot, le modèle inventait des critères faux. Les faits sur le Spot lui sont désormais fournis dans la requête : on ne compte pas sur ce qu'il sait, on lui donne ce qu'il doit dire.
+- **Paiement à l'heure ou au token.** L'analyste tourne sur un GPU loué à l'heure, qui reste inactif l'essentiel du temps : c'est précisément le gaspillage que l'outil mesure. Pour une charge aussi faible, un modèle facturé au token (Amazon Bedrock par exemple) serait plus économique ; le GPU dédié devient rentable avec un volume de requêtes élevé et continu.
+- **Serverless (Lambda)** : aucun coût quand rien ne tourne, aucune machine à maintenir.
+- **DynamoDB avec clé `gpu` + `horodatage`** : « les 15 dernières minutes d'un GPU » est une simple requête sur la clé de tri. Les rapports IA sont rangés sous la clé `analyse:<gpu>`, à part des mesures.
+- **Secrets hors du code** : le jeton est lu depuis les variables d'environnement Lambda et les Secrets Colab.
+- **Moindre privilège** : la politique IAM fournie n'autorise que les actions nécessaires sur la seule table du projet.
 
 ## Structure du dépôt
 
 ```
 gpu-watch/
 ├── lambda/
-│   └── lambda_function.py    # Collecteur + API + tableau de bord
+│   └── lambda_function.py    # Collecteur, API et tableau de bord
 ├── colab/
-│   └── gpu_watch_colab.py    # Capteur, charge de test et analyste IA (cellules Colab)
+│   └── gpu_watch_colab.py    # Capteur, calcul des coûts et analyste IA (cellules Colab)
 ├── aws/
 │   └── iam-policy.json       # Permissions minimales de la fonction Lambda
 └── docs/
@@ -68,11 +92,11 @@ gpu-watch/
 ### 1. Côté AWS
 
 1. **DynamoDB** : créer une table `gpu-watch-mesures`, clé de partition `gpu` (chaîne), clé de tri `horodatage` (chaîne).
-2. **Lambda** : créer une fonction Python 3.13, coller le contenu de `lambda/lambda_function.py`.
+2. **Lambda** : créer une fonction Python 3.13 avec le contenu de `lambda/lambda_function.py`.
    - Variables d'environnement : `TABLE=gpu-watch-mesures` et `JETON=<un jeton secret>`
    - Rôle d'exécution : permissions de `aws/iam-policy.json`
-   - Créer une **URL de fonction** (authentification `NONE` : la sécurité est assurée par le jeton pour l'écriture)
-3. **CloudWatch** : créer deux alarmes sur l'espace de noms `GPUWatch`, reliées à une rubrique SNS avec votre email :
+   - Créer une **URL de fonction** (authentification `NONE` : l'écriture est protégée par le jeton)
+3. **CloudWatch** : deux alarmes sur l'espace de noms `GPUWatch`, reliées à une rubrique SNS :
    - `gpu-surchauffe` : `Temperature` (maximum sur 1 min) > 80
    - `gpu-inactif` : `Utilisation` (moyenne sur 5 min) < 10, pendant 2 périodes sur 2
 
@@ -88,20 +112,17 @@ import secrets; print(secrets.token_hex(16))
 3. Copier les cellules de `colab/gpu_watch_colab.py` et les exécuter dans l'ordre.
 4. Ouvrir l'URL de la fonction dans un navigateur : le tableau de bord s'affiche.
 
-## Coûts
-
-Conçu pour rester dans l'offre gratuite AWS : Lambda et DynamoDB sont sollicités très faiblement, et seules deux métriques personnalisées sont envoyées à CloudWatch. Le GPU est fourni gratuitement par Google Colab.
-
 ## Pistes d'amélioration
 
-- Déployer toute l'infrastructure avec **CloudFormation** ou **Terraform**
-- Surveiller **plusieurs GPU** (sélecteur dans le tableau de bord)
-- Faire tourner le capteur sur une instance **EC2 GPU** avec l'agent CloudWatch
-- Purge automatique des anciennes mesures avec le **TTL** DynamoDB
+- Déclencher réellement l'arrêt automatique d'une instance EC2 inactive (alarme CloudWatch + action EC2)
+- Récupérer les prix en direct avec l'API AWS Price List
+- Surveiller plusieurs GPU et agréger le gaspillage par équipe
+- Déployer l'infrastructure avec CloudFormation ou Terraform
+- Purger les anciennes mesures avec le TTL DynamoDB
 
 ## Limites
 
-Projet personnel d'apprentissage, non destiné à la production. L'analyste IA est un petit modèle : ses diagnostics doivent être relus par un humain.
+Projet personnel d'apprentissage, non destiné à la production. Les rapports de l'IA proviennent d'un petit modèle et doivent être relus ; les chiffres de référence sont ceux affichés sur les cartes, calculés par le code.
 
 ---
 

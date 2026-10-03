@@ -1,5 +1,5 @@
 """
-GPU Watch - Fonction AWS Lambda (collecteur + tableau de bord)
+GPU Watch - Fonction AWS Lambda (collecteur + API + tableau de bord)
 
 Rôles :
   - POST  /                 : reçoit une mesure GPU ou une analyse IA (protégé par jeton)
@@ -66,6 +66,16 @@ PAGE_HTML = """<!DOCTYPE html>
   .analyse-heure { color:var(--doux); font-size:.8rem; margin-top:4px; }
   .analyse-texte { white-space:pre-wrap; line-height:1.6; margin-top:14px; font-size:.95rem; }
 
+  /* Bandeau des coûts */
+  .titre-section { color:var(--doux); font-size:.75rem; text-transform:uppercase; letter-spacing:1.5px; margin:0 0 10px 4px; }
+  .grille-couts { display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:16px; margin-bottom:24px; }
+  .cout .montant { font-size:1.9rem; font-weight:700; margin-top:6px; }
+  .cout .detail { color:var(--doux); font-size:.8rem; margin-top:6px; }
+  .cout.gaspi { border-color:#7f1d1d; background:linear-gradient(160deg, #1c1420, #121829); }
+  .cout.gaspi .montant { color:#f87171; }
+  .cout.eco { border-color:#14532d; background:linear-gradient(160deg, #0f1f1a, #121829); }
+  .cout.eco .montant { color:#4ade80; }
+
   /* Petits écrans : l'analyse passe en dessous */
   @media (max-width: 1100px) {
     .mise-en-page { grid-template-columns:1fr; }
@@ -77,7 +87,7 @@ PAGE_HTML = """<!DOCTYPE html>
 <body>
 <header>
   <div>
-    <h1>🛰️ GPU Watch</h1>
+    <h1>GPU Watch</h1>
     <div class="sous" id="nom-gpu">En attente de données…</div>
   </div>
   <div class="statut hors-ligne" id="statut">● Hors ligne</div>
@@ -85,12 +95,38 @@ PAGE_HTML = """<!DOCTYPE html>
 
 <div class="mise-en-page">
   <div class="colonne-principale">
+
+    <div class="titre-section">Coûts · 15 dernières minutes</div>
+    <section class="grille-couts">
+      <div class="carte cout">
+        <div class="libelle">Coût de la période</div>
+        <div class="montant" id="cout-total">–</div>
+        <div class="detail" id="cout-total-detail">–</div>
+      </div>
+      <div class="carte cout gaspi">
+        <div class="libelle">Argent gaspillé (GPU inactif)</div>
+        <div class="montant" id="cout-gaspi">–</div>
+        <div class="detail" id="cout-gaspi-detail">–</div>
+      </div>
+      <div class="carte cout gaspi">
+        <div class="libelle">Gaspillage projeté sur un mois</div>
+        <div class="montant" id="cout-mois">–</div>
+        <div class="detail">si ce rythme se maintient 24 h/24</div>
+      </div>
+      <div class="carte cout eco">
+        <div class="libelle">Économie possible par mois</div>
+        <div class="montant" id="cout-eco">–</div>
+        <div class="detail">arrêt automatique + instance Spot</div>
+      </div>
+    </section>
+
+    <div class="titre-section">Métriques en direct</div>
     <section class="grille-jauges" id="jauges"></section>
     <section class="grille-courbes" id="courbes"></section>
   </div>
 
   <aside class="carte analyse">
-    <div class="analyse-titre">🧠 Analyse IA</div>
+    <div class="analyse-titre">Analyse IA</div>
     <div class="analyse-heure" id="analyse-heure">Aucune analyse pour l'instant</div>
     <div class="analyse-texte" id="analyse-texte">Lance l'analyste depuis Colab pour voir son diagnostic ici.</div>
   </aside>
@@ -136,6 +172,48 @@ PAGE_HTML = """<!DOCTYPE html>
     });
   }
 
+  // ---------- Calcul des coûts (même logique que dans Colab) ----------
+  const PRIX_HEURE = 0.526;      // g4dn.xlarge à la demande, en $/h
+  const PRIX_SPOT = 0.25;        // g4dn.xlarge en Spot, en $/h
+  const INTERVALLE = 5;          // une mesure toutes les 5 secondes
+  const SEUIL_INACTIF = 10;      // sous 10 %, le GPU est inactif
+  const HEURES_PAR_MOIS = 730;
+
+  // Affiche un montant : 3 décimales sous 1 $, sinon 2, avec une virgule
+  function dollars(valeur) {
+    return valeur.toFixed(valeur < 1 ? 3 : 2).replace(".", ",") + " $";
+  }
+
+  function afficherCouts(mesures) {
+    // 1. Coût d'une mesure (5 secondes de location)
+    const coutParMesure = PRIX_HEURE * INTERVALLE / 3600;
+
+    // 2. Les mesures inactives
+    const inactives = mesures.filter(m => m.utilisation < SEUIL_INACTIF);
+
+    // 3. Coûts sur la période
+    const coutTotal = mesures.length * coutParMesure;
+    const coutGaspille = inactives.length * coutParMesure;
+    const partInactive = inactives.length / mesures.length;
+
+    // 4. Projection sur un mois
+    const coutMois = HEURES_PAR_MOIS * PRIX_HEURE;
+    const gaspiMois = coutMois * partInactive;
+    const coutArretAutoSpot = HEURES_PAR_MOIS * (1 - partInactive) * PRIX_SPOT;
+    const economie = coutMois - coutArretAutoSpot;
+
+    // 5. Remplir les cartes
+    const minutes = mesures.length * INTERVALLE / 60;
+    document.getElementById("cout-total").textContent = dollars(coutTotal);
+    document.getElementById("cout-total-detail").textContent =
+      Math.round(minutes) + " min au tarif g4dn.xlarge (" + PRIX_HEURE + " $/h)";
+    document.getElementById("cout-gaspi").textContent = dollars(coutGaspille);
+    document.getElementById("cout-gaspi-detail").textContent =
+      Math.round(partInactive * 100) + " % du temps sous " + SEUIL_INACTIF + " % d'utilisation";
+    document.getElementById("cout-mois").textContent = dollars(gaspiMois);
+    document.getElementById("cout-eco").textContent = dollars(economie);
+  }
+
   async function actualiser() {
     try {
       const rep = await fetch("?donnees=1");
@@ -155,9 +233,12 @@ PAGE_HTML = """<!DOCTYPE html>
         statut.textContent = "● En ligne";
         statut.className = "statut en-ligne";
       } else {
-        statut.textContent = "● Silencieux depuis " + Math.round(age / 60) + " min";
+        statut.textContent = "● Silencieux depuis " +
+          (age < 60 ? Math.round(age) + " s" : Math.round(age / 60) + " min");
         statut.className = "statut hors-ligne";
       }
+
+      afficherCouts(mesures);
 
       const heures = mesures.map(x => new Date(x.horodatage).toLocaleTimeString("fr-FR"));
       for (const m of METRIQUES) {

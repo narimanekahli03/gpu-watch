@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LectureEcritureMesures",
+      "Effect": "Allow",
+      "Action": ["dynamodb:PutItem", "dynamodb:Query"],
+      "Resource": "arn:aws:dynamodb:*:*:table/gpu-watch-mesures"
+    },
+    {
+      "Sid": "EnvoiMetriquesCloudWatch",
+      "Effect": "Allow",
+      "Action": "cloudwatch:PutMetricData",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": { "cloudwatch:namespace": "GPUWatch" }
+      }
+    },
+    {
+      "Sid": "JournauxLambda",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "*"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+# Secrets : ne jamais publier
+.env
+*.secret
+secrets.*
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Système
+.DS_Store
+Thumbs.db
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

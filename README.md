@@ -96,7 +96,6 @@ Conçu pour rester dans l'offre gratuite AWS : Lambda et DynamoDB sont sollicit�
 
 - Déployer toute l'infrastructure avec **CloudFormation** ou **Terraform**
 - Surveiller **plusieurs GPU** (sélecteur dans le tableau de bord)
-- Remplacer le jeton partagé par une authentification **IAM** ou **Cognito**
 - Faire tourner le capteur sur une instance **EC2 GPU** avec l'agent CloudWatch
 - Purge automatique des anciennes mesures avec le **TTL** DynamoDB
 

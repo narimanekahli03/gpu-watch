@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="1200" height="380" role="img" aria-label="GPU Watch : surveillance d'un GPU en temps réel">
+  <defs>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="55%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#fb923c"/>
+    </linearGradient>
+    <linearGradient id="aire" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0.02"/>
+    </linearGradient>
+    <clipPath id="coins"><rect width="1200" height="380" rx="18"/></clipPath>
+    <pattern id="grille" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#141b2e" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="380" rx="18" fill="#0b0f19"/>
+  <rect width="1200" height="380" rx="18" fill="url(#grille)"/>
+
+  <g font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="64" y="112" font-size="15" font-weight="600" letter-spacing="3" fill="#94a3b8">GPU OBSERVABILITY  ·  AIOPS  ·  FINOPS</text>
+    <text x="60" y="192" font-size="78" font-weight="700" fill="#f8fafc">GPU Watch</text>
+    <text x="64" y="242" font-size="24" fill="#cbd5e1">Température, utilisation, mémoire, puissance.</text>
+    <text x="64" y="284" font-size="16" fill="#64748b">AWS Lambda  ·  DynamoDB  ·  CloudWatch  ·  GPU T4 Colab  ·  Qwen 2.5</text>
+
+    <rect x="700" y="64" width="436" height="256" rx="14" fill="#121829" stroke="#1f2a44"/>
+    <text x="724" y="102" font-size="13" fill="#94a3b8">Utilisation GPU · 15 dernières minutes</text>
+    <rect x="1022" y="86" width="90" height="24" rx="12" fill="none" stroke="#166534"/>
+    <circle cx="1040" cy="98" r="3.5" fill="#4ade80"/>
+    <text x="1050" y="102" font-size="12" fill="#4ade80">En ligne</text>
+
+    <line x1="724" y1="244" x2="1112" y2="244" stroke="#1f2a44"/>
+    <line x1="724" y1="184" x2="1112" y2="184" stroke="#1f2a44" stroke-dasharray="3 5"/>
+    <path d="M724 242 L836 242 L846 150 L856 162 L866 140 L896 142 L906 242 L1012 242 L1022 156 L1030 168 L1038 150 L1048 242 L1112 242 L1112 244 L724 244 Z" fill="url(#aire)"/>
+    <path d="M724 242 L836 242 L846 150 L856 162 L866 140 L896 142 L906 242 L1012 242 L1022 156 L1030 168 L1038 150 L1048 242 L1112 242" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linejoin="round"/>
+    <rect x="724" y="252" width="112" height="4" rx="2" fill="#f87171" opacity="0.85"/>
+    <rect x="906" y="252" width="106" height="4" rx="2" fill="#f87171" opacity="0.85"/>
+    <rect x="1048" y="252" width="64" height="4" rx="2" fill="#f87171" opacity="0.85"/>
+
+    <text x="724" y="290" font-size="22" font-weight="700" fill="#22d3ee">5 s</text>
+    <text x="724" y="307" font-size="12" fill="#94a3b8">fréquence de mesure</text>
+    <text x="862" y="290" font-size="22" font-weight="700" fill="#fb923c">80 °C</text>
+    <text x="862" y="307" font-size="12" fill="#94a3b8">seuil de surchauffe</text>
+    <text x="1000" y="290" font-size="22" font-weight="700" fill="#f87171">88 %</text>
+    <text x="1000" y="307" font-size="12" fill="#94a3b8">du temps inactif</text>
+  </g>
+
+  <rect x="0" y="372" width="1200" height="8" fill="url(#accent)" clip-path="url(#coins)"/>
+</svg>
